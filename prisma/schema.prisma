@@ -1,0 +1,117 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+enum OrderStatus {
+    PENDING_PAYMENT // created but not paid
+    PAID // payment succeeded
+    PROCESSING // you are preparing the order
+    SHIPPED
+    DELIVERED
+    CANCELLED
+}
+
+enum PaymentStatus {
+    PENDING
+    REQUIRES_ACTION
+    SUCCEEDED
+    FAILED
+    REFUNDED
+}
+
+enum PaymentProvider {
+    STRIPE
+    RAZORPAY
+}
+
+generator client {
+    provider = "prisma-client"
+    output   = "../app/generated/prisma"
+}
+
+datasource db {
+    provider = "postgresql"
+}
+
+model Category {
+    id       Int       @id @default(autoincrement())
+    slug     String    @unique
+    name     String
+    products Product[]
+}
+
+model Product {
+    id          Int         @id @default(autoincrement())
+    slug        String      @unique
+    name        String
+    description String
+    features    String
+    price       Int
+    imageUrl    String
+    categoryId  Int
+    category    Category    @relation(fields: [categoryId], references: [id])
+    orderItems  OrderItem[]
+}
+
+model Payment {
+    id       String          @id @default(cuid())
+    orderId  String          @unique
+    provider PaymentProvider
+    status   PaymentStatus   @default(PENDING)
+
+    amount   Int // should equal Order.totalAmount
+    currency String @default("INR")
+
+    // IDs from the payment provider (strings you get back from APIs)
+    providerPaymentId String? // e.g. Stripe payment_intent id or Razorpay payment id
+    providerOrderId   String? // e.g. Razorpay order id, Stripe session id
+
+    rawPayload Json? // store latest webhook payload if you want
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Order {
+    id          String  @id @default(cuid())
+    trackingId  String  @unique @default(ulid())
+    email       String
+    fullName    String
+    phoneNumber String?
+
+    addressLine1 String
+    addressLine2 String?
+    city         String
+    state        String
+    postalCode   String
+    country      String
+
+    status      OrderStatus @default(PENDING_PAYMENT)
+    totalAmount Int
+    currency    String      @default("INR")
+
+    items   OrderItem[]
+    payment Payment?
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
+
+model OrderItem {
+    id        Int    @id @default(autoincrement())
+    orderId   String
+    productId Int
+
+    quantity  Int
+    unitPrice Int
+    subtotal  Int
+
+    order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+    product Product @relation(fields: [productId], references: [id])
+
+    @@index([orderId])
+    @@index([productId])
+}
